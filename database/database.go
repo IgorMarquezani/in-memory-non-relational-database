@@ -3,29 +3,30 @@ package database
 import (
 	"app/instruction"
 	"app/utils"
+	"errors"
 	"fmt"
 )
 
 type Database struct {
-	hash map[any]Value
+	hash map[string]Value
 }
 
 func NewDatabase() *Database {
 	return &Database{
-		hash: make(map[any]Value),
+		hash: make(map[string]Value),
 	}
 }
 
-func (d *Database) Set(key any, value Value) {
+func (d *Database) Set(key string, value Value) {
 	d.hash[key] = value
 }
 
-func (d *Database) Del(key any) {
+func (d *Database) Del(key string) {
 	delete(d.hash, key)
 }
 
-func (d *Database) Get(key any) Value {
-	v, _ := d.hash[key]
+func (d *Database) Get(key string) Value {
+	v := d.hash[key]
 	return v
 }
 
@@ -41,7 +42,6 @@ func (d *Database) StartDatabase() {
 				}
 
 				d.Set(msg.Key, value)
-        fmt.Println(d.hash)
 
 				msg.Channel <- instruction.Message{}
 
@@ -57,10 +57,10 @@ func (d *Database) StartDatabase() {
 				}
 
 			default:
-				fmt.Println("Invalid command")
+				msg.Channel <- instruction.Message{
+					Err: errors.New("Invalid command"),
+				}
 			}
-
-		default:
 		}
 	}
 }

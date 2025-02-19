@@ -1,10 +1,10 @@
 package server
 
 import (
+	"app/commands"
 	"app/config"
 	"app/database"
-	"app/instruction"
-	"app/parser"
+	"app/utils"
 	"bytes"
 	"errors"
 	"fmt"
@@ -16,9 +16,9 @@ import (
 )
 
 type Server struct {
-	config   config.DBConfig
+	config   *config.DBConfig
 	mutex    sync.Mutex
-	database database.Database
+	database *database.Database
 	clients  uint
 }
 
@@ -28,8 +28,8 @@ func NewServer(conf *config.DBConfig, db *database.Database) (*Server, error) {
 	}
 
 	return &Server{
-		config:   *conf,
-		database: *db,
+		config:   conf,
+		database: db,
 	}, nil
 }
 
@@ -51,6 +51,7 @@ func (s *Server) RunServer() {
 		}
 
 		s.ChangeClient("sum", 1)
+
 		fmt.Println("connection accepted:", conn.RemoteAddr())
 
 		go s.HandleConnection(conn)
@@ -74,6 +75,8 @@ func (s *Server) HandleConnection(conn net.Conn) {
 		if err := s.HandleCommand(conn, arr); err != nil {
 			conn.Write([]byte(fmt.Sprint("error:", err.Error())))
 		}
+
+		s.ChangeClient("sub", 1)
 	}
 }
 
@@ -101,93 +104,51 @@ func (s *Server) HandleCommand(conn net.Conn, line []byte) error {
 	switch command {
 
 	case "echo":
-		if len(args) < 1 || len(args) > 1 {
-			return errors.New("(error) ERR wrong number of arguments for 'echo' command")
-		}
-
-		msg, _, err := parser.ParseVariable([]byte(args[0]))
+		v, err := commands.Echo(args)
 		if err != nil {
-			return errors.New("Err: " + err.Error())
-		}
-
-		v, ok := msg.(string)
-		if !ok {
-			return errors.New("Unexpected error")
+			return err
 		}
 
 		_, err = conn.Write([]byte(`"` + v + `"`))
 		if err != nil {
 			return errors.New("Error while sending echo:" + err.Error())
 		}
+
 	case "set":
-		if len(args) < 2 || len(args) > 5 {
-			return errors.New("(error) ERR wrong number of arguments for 'set' command")
-		}
-
-		arr := bytes.Trim([]byte(args[1]), "\x00")
-
-		data, Type, err := parser.ParseVariable(arr)
+		ch, err := commands.Set(args, database.InstructionQueue)
 		if err != nil {
-			return errors.New("(error) ERR " + err.Error())
+			return err
 		}
 
-		cmd := instruction.Instruction{
-			Command: command,
-			Key:     args[0],
-			Data:    data,
-			Type:    Type,
-			Channel: make(chan instruction.Message, 1),
+		msg := utils.WaitForChan(ch)
+		if msg.Err != nil {
+			conn.Write([]byte("(error) ERR " + msg.Err.Error()))
 		}
 
-		database.InstructionQueue <- cmd
-
-	loop1:
-		for {
-			select {
-			case msg := <-cmd.Channel:
-				if msg.Err != nil {
-					conn.Write([]byte("(error) ERR " + msg.Err.Error()))
-				}
-
-				_, err := conn.Write([]byte("OK"))
-				if err != nil {
-					fmt.Println("error:", err)
-				}
-
-				break loop1
-			}
+		_, err = conn.Write([]byte("OK"))
+		if err != nil {
+			fmt.Println("error:", err)
 		}
+
 	case "get":
-		if len(args) < 1 || len(args) > 1 {
-			return errors.New("(error) ERR wrong number of arguments for 'get' command")
+		ch, err := commands.Get(args, database.InstructionQueue)
+		if err != nil {
+			return err
 		}
 
-		cmd := instruction.Instruction{
-			Command: command,
-			Key:     args[0],
-			Channel: make(chan instruction.Message, 1),
+		msg := utils.WaitForChan(ch)
+
+		if msg.Err != nil {
+			conn.Write([]byte("(error) ERR " + msg.Err.Error()))
 		}
 
-		database.InstructionQueue <- cmd
+		if len(msg.Data) == 0 {
+			msg.Data = "(nil)"
+		}
 
-	loop2:
-		for {
-			select {
-			case msg := <-cmd.Channel:
-				if msg.Err != nil {
-					conn.Write([]byte("(error) ERR " + msg.Err.Error()))
-				}
-
-				_, err := conn.Write([]byte(fmt.Sprintf(`"%s"`, msg.Data)))
-				if err != nil {
-					fmt.Println("error:", err)
-				}
-
-				break loop2
-
-			default:
-				continue
-			}
+		_, err = conn.Write([]byte(fmt.Sprintf(`"%s"`, msg.Data)))
+		if err != nil {
+			fmt.Println("error:", err)
 		}
 
 	default:

@@ -36,8 +36,6 @@ func ParseSimple(variable []byte) (any, string, error) {
 
 	tokens := strings.Split(string(variable), "\\r\\n")
 
-	fmt.Println("tokens", tokens)
-
 	if len(tokens) < 1 {
 		return nil, "", errors.New("invalid data type")
 	}
@@ -54,7 +52,6 @@ func ParseSimple(variable []byte) (any, string, error) {
 
 	case ':':
 		data, err := strconv.Atoi(tokens[0][1:])
-		fmt.Println(err)
 		if err != nil {
 			return nil, "", errors.New("syntax error")
 		}

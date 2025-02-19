@@ -7,7 +7,7 @@ type Message struct {
 
 type Instruction struct {
 	Command string
-	Key     any
+	Key     string 
 	Data    any
 	Type    string
 	Channel chan Message
