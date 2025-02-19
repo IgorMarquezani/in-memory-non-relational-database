@@ -1,0 +1,14 @@
+package instruction
+
+type Message struct {
+	Err  error
+	Data string
+}
+
+type Instruction struct {
+	Command string
+	Key     any
+	Data    any
+	Type    string
+	Channel chan Message
+}
