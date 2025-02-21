@@ -49,7 +49,8 @@ func ParseSimple(variable []byte) (any, string, error) {
 		v = tokens[0][1:]
 		t = "string"
 	case '-':
-
+		v = tokens[0][1:]
+		t = "error"
 	case ':':
 		data, err := strconv.Atoi(tokens[0][1:])
 		if err != nil {
@@ -58,6 +59,17 @@ func ParseSimple(variable []byte) (any, string, error) {
 
 		v = data
 		t = "int"
+	case '_':
+		v = nil
+		t = "null"
+	case '#':
+		if tokens[0][0] == 't' {
+			v = true
+		} else {
+			v = false
+		}
+
+		t = "boolen"
 	case ',':
 		data, err := strconv.ParseFloat(tokens[0][1:], 64)
 		if err == nil {
